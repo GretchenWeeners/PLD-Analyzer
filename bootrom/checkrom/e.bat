@@ -1,0 +1,2 @@
+@edit main.c
+

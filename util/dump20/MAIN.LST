@@ -1,0 +1,808 @@
+SNASM68K, version 2.1D, Dec 06 1995, 11:55:16
+(c) 1993-95 Cross Products Ltd. All Rights Reserved
+                               | ;----------------------------------------------------------------------------
+                               | ; 20-pin combinatorial PAL dumping routine
+                               | ;----------------------------------------------------------------------------
+                               | ; D3 : TPS22960 SR level (0= 75uS rise time, 1= 660-uS rise time)
+                               | ; D2 : TPS22960 power output (0= off, 1= on)
+                               | ; D1 : TPS20x1B power output (0= off, 1= on)
+                               | ; D0 : ST890C power output (0= off, 1= on)
+                               | ;----------------------------------------------------------------------------
+                               | ; Rev.4 fmt
+                               | ; d0-d7 -> ix0-ix7 -> pins 1,2,3,4,5,6,7,8
+                               | ; d0-d1 -> ix8-ix9 -> pins 9,11
+                               | ; d0-d7 -> bx0-bx7 -> pins 19,18,17,16,15,14,13,12
+                               | ; Rev.3 fmt
+                               | ; d0-d7 -> ix0-ix7 -> pins 23,22,21,20,19,18,17,16
+                               | ; d0-d1 -> ix8,ix9 -> pins 15,14
+                               | ; 8 bit bx, 10-bit ix
+                               | ; assuming only bx was swapped;
+                               | ; write linear ix, then swap bx
+                               | ; also means swap rx
+                               | ; Rev.1 fmt
+                               | ; d0-d7
+                               | 
+         = 00000004            | PWR_ON                  =       $04
+         = 00000000            | PWR_OFF                 =       $00
+                               | 
+                               |                         include "global.inc"
+                               | ;----------------------------------------------------------------------------
+                               | ; global.inc
+                               | ;----------------------------------------------------------------------------
+                               | 
+         = 00000000            | ROM_BASE                =       $000000
+         = 00080000            | ROM_SIZE                =       $080000 ; 512K
+                               | 
+         = 00400000            | RAM_BASE                =       $400000
+         = 00100000            | RAM_SIZE                =       $100000 ; 1MB
+                               | 
+         = 00800000            | EXT_BASE                =       $800000
+         = 00080000            | EXT_SIZE                =       $080000 ; 512K
+                               | 
+         = ffff8000            | REGBASE                 =       $FFFF8000
+                               | 
+         = 00500000            | ENTRY_POINT             =       $500000
+         = 00480000            | VAR_BASE                =       $480000
+         = 00507800            | STACK_TOP               =       $507800
+         = 00507800            | ISR_BASE                =       $507800
+         = 00000800            | ISR_SIZE                =       $800
+         = 00507f00            | EX_GLOBAL_JMP           =       $507F00
+                               | 
+                               | 
+                               | ; Register offsets from base
+         = 00000000            | R_IX                    =       $00
+         = 00000000            | R_IXH                   =       $00
+         = 00000001            | R_IXL                   =       $01
+         = 00000002            | R_RX                    =       $02
+         = 00000002            | R_RXH                   =       $02
+         = 00000003            | R_RXL                   =       $03
+         = 00000002            | R_BX                    =       $02
+         = 00000002            | R_BXH                   =       $02
+         = 00000003            | R_BXL                   =       $03
+         = 00000004            | R_DATA                  =       $04
+         = 00000005            | R_FLUSH_TX              =       $05
+                               | 
+         = 00000008            | R_ROMWS0                =       $08 ;Page 1
+
+         = 00000009            | R_ROMWS1                =       $09
+         = 0000000a            | R_RAMWS0                =       $0A
+         = 0000000b            | R_RAMWS1                =       $0B
+         = 0000000c            | R_EXTWS0                =       $0C
+         = 0000000d            | R_EXTWS1                =       $0D
+         = 0000000e            | R_PIOWS0                =       $0E
+         = 0000000f            | R_PIOWS1                =       $0F
+                               | 
+         = 00000010            | R_OUT                   =       $10
+                               | 
+         = 00000018            | R_RXF                   =       $18
+         = 00000019            | R_FLT                   =       $19
+         = 0000001a            | R_OC                    =       $1A
+         = 0000001b            | R_OUT1                  =       $1B
+         = 0000001c            | R_SDO                   =       $1C
+         = 0000001d            | R_OUT2                  =       $1D
+         = 0000001e            | R_RST                   =       $1E
+         = 0000001f            | R_TXE                   =       $1F
+                               | 
+                               | ; BXH bits
+         = 00000007            | B_SDO                   =       7
+         = 00000006            | B_SDI                   =       6
+         = 00000005            | B_MODE                  =       5
+         = 00000004            | B_SCLK                  =       4
+         = 00000003            | B_ENUM                  =       3
+         = 00000002            | B_TVR                   =       2
+                               | 
+                               | ; RXH bits
+         = 00000007            | B_FAULT_LED             =       7
+         = 00000006            | B_ENUM_LED              =       6
+                               | 
+                               | ; BXH/RXH bits
+         = 00000001            | B_B9                    =       1
+         = 00000000            | B_B8                    =       0
+                               | 
+                               | ; Direct register addresses
+         = ffff8002            | RX                      =       (REGBASE+R_RX)
+         = ffff8002            | RXH                     =       (REGBASE+R_RXH)
+         = ffff8003            | RXL                     =       (REGBASE+R_RXL)
+                               | 
+         = ffff8002            | BX                      =       (REGBASE+R_BX)
+         = ffff8003            | BXL                     =       (REGBASE+R_BXL)
+         = ffff8002            | BXH                     =       (REGBASE+R_BXH)
+                               | 
+         = ffff8000            | IX                      =       (REGBASE+R_IX)
+         = ffff8001            | IXL                     =       (REGBASE+R_IXL)
+         = ffff8000            | IXH                     =       (REGBASE+R_IXH)
+                               | 
+         = ffff8004            | USB_DATA                =       (REGBASE+R_DATA)
+         = ffff8005            | USB_FLUSH_TX            =       (REGBASE+R_FLUSH_TX)
+                               | 
+         = ffff8008            | ROMWS0                  =       (REGBASE+R_ROMWS0)
+         = ffff8009            | ROMWS1                  =       (REGBASE+R_ROMWS1)
+         = ffff800a            | RAMWS0                  =       (REGBASE+R_RAMWS0)
+         = ffff800b            | RAMWS1                  =       (REGBASE+R_RAMWS1)
+         = ffff800c            | EXTWS0                  =       (REGBASE+R_EXTWS0)
+         = ffff800d            | EXTWS1                  =       (REGBASE+R_EXTWS1)
+         = ffff800e            | PIOWS0                  =       (REGBASE+R_PIOWS0)
+         = ffff800f            | PIOWS1                  =       (REGBASE+R_PIOWS1)
+                               | 
+         = ffff8010            | OUT                     =       (REGBASE+R_OUT)
+                               |  ;Page 2
+
+         = ffff8018            | RXF                     =       (REGBASE+R_RXF)
+         = ffff801c            | SDO                     =       (REGBASE+R_SDO)
+         = ffff801a            | OC                      =       (REGBASE+R_OC)
+         = ffff801e            | RST                     =       (REGBASE+R_RST)
+         = ffff8019            | FLT                     =       (REGBASE+R_FLT)
+         = ffff801d            | OUT2                    =       (REGBASE+R_OUT2)
+         = ffff801b            | OUT1                    =       (REGBASE+R_OUT1)
+         = ffff801f            | TXE                     =       (REGBASE+R_TXE)
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Macros
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               | delay                   macro   1
+                               |                         rept    \1
+                               |                         nop
+                               |                         endr
+                               |                         endm
+                               | 
+                               | push                    macro   1
+                               |                         move.l  \1, -(a7)
+                               |                         endm
+                               | 
+                               | pop                     macro   1
+                               |                         move.l  (a7)+, \1
+                               |                         endm
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; END
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Variables
+                               | ;----------------------------------------------------------------------------
+                               | 
+         = 00480000            |                         rsset   $480000
+         = 00480000            | device_buffer           rs.b    $040000 ; 256K
+                               | 
+                               |                         include "init.inc"
+                               | ;----------------------------------------------------------------------------
+                               | ; init.inc --
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               |                         org     ENTRY_POINT
+                               | 
+00500000 : 48E7 FFFF           |                         move.l  d0-d7/a0-a7, -(a7)
+                               | 
+                               |                         ; Call main program
+00500004 : 4EB9 @@@@ @@@@      |                         jsr     main
+                               | 
+0050000a : 4CDF FFFF           |                         move.l  (a7)+, d0-d7/a0-a7
+0050000e : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               |                         include "device.inc"
+                               | ;----------------------------------------------------------------------------
+                               | ; device.inc --
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               |                         align   2
+00500010 :                     | device_init:
+00500010 : 31FC 0000 8000      |                         move.w  #$0000, (IX).w ;Page 3
+
+00500016 : 31FC 0000 8002      |                         move.w  #$0000, (RX).w
+0050001c : 4EB9 @@@@ @@@@      |                         jsr     power_off
+00500022 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Turn power off
+                               | ;----------------------------------------------------------------------------
+                               |                         align   2
+00500024 :                     | power_off:
+                               |                         push    d0
+00500024 : 2F00                
+                               | 
+                               |                         ; Turn off power
+00500026 : 11FC 0000 8010      |                         move.b  #PWR_OFF, (OUT).w
+                               |                        
+                               |                         ; Wait for OUT2=0, OUT1=1 (Vref < 1.40V)
+0050002c : 4A38 801B           |         @wait_out1_hi:  tst.b   (OUT1).w
+00500030 : 6AFA                |                         bpl.s   @wait_out1_hi
+00500032 : 4A38 801D           |         @wait_out2_lo:  tst.b   (OUT2).w
+00500036 : 6BFA                |                         bmi.s   @wait_out2_lo
+                               | 
+                               |                         ; Input MCP active low RESET# output
+                               |                         ; For power off, wait until LOW
+00500038 : 4A38 801E           |         @wait_rst_lo:   tst.b   (RST).w
+0050003c : 6BFA                |                         bmi.s   @wait_rst_lo
+                               | 
+                               |                         ; Input +5V rail directly
+                               |                         ; For power off, wait until LOW
+0050003e : 0838 0002 8002      |         @wait_tvr_lo:   btst    #2, (BXH).w
+00500044 : 66F8                |                         bne.s   @wait_tvr_lo
+                               | 
+                               |                         ; Short delay
+00500046 : 707F                |                         moveq   #$7F, d0
+00500048 : 4E71                |         @delay:         nop
+0050004a : 51C8 FFFC           |                         dbra    d0, @delay
+                               | 
+                               |                         pop     d0
+0050004e : 201F                
+00500050 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Turn power off
+                               | ;----------------------------------------------------------------------------
+                               |                         align   2
+00500052 :                     | power_wait_off:
+                               |                         ; Wait for OUT2=0, OUT1=1 (Vref < 1.40V)
+00500052 : 4A38 801B           |         @wait_out1_hi:  tst.b   (OUT1).w
+00500056 : 6AFA                |                         bpl.s   @wait_out1_hi
+00500058 : 4A38 801D           |         @wait_out2_lo:  tst.b   (OUT2).w
+0050005c : 6BFA                |                         bmi.s   @wait_out2_lo
+                               | 
+                               |                         ; Input MCP active low RESET# output
+                               |                         ; For power off, wait until LOW
+0050005e : 4A38 801E           |         @wait_rst_lo:   tst.b   (RST).w
+00500062 : 6BFA                |                         bmi.s   @wait_rst_lo
+                               | 
+                               |                         ; Input +5V rail directly
+                               |                         ; For power off, wait until LOW
+00500064 : 0838 0002 8002      |         @wait_tvr_lo:   btst    #2, (BXH).w
+0050006a : 66F8                |                         bne.s   @wait_tvr_lo
+                               | 
+0050006c : 4E75                |                         rts ;Page 4
+
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Turn power on
+                               | ;----------------------------------------------------------------------------
+                               |                         align   2
+0050006e :                     | power_on:
+                               |                         push    d0
+0050006e : 2F00                
+                               | 
+                               |                         ; Turn on power
+00500070 : 11FC 0004 8010      |                         move.b  #PWR_ON, (OUT).w
+                               |                        
+                               |                         ; Wait for OUT2=1, OUT1=0 (Vref > 4.75V)
+00500076 : 4A38 801B           |         @wait_out1_lo:  tst.b   (OUT1).w
+0050007a : 6BFA                |                         bmi.s   @wait_out1_lo
+0050007c : 4A38 801D           |         @wait_out2_hi:  tst.b   (OUT2).w
+00500080 : 6AFA                |                         bpl.s   @wait_out2_hi
+                               | 
+                               |                         ; Input MCP active low RESET# output (350ms)
+                               |                         ; For power on, wait until HIGH
+00500082 : 4A38 801E           |         @wait_rst_hi:   tst.b   (RST).w
+00500086 : 6AFA                |                         bpl.s   @wait_rst_hi
+                               | 
+                               |                         ; Input +5V rail directly
+                               |                         ; For power on, wait until HIGH
+00500088 : 0838 0002 8002      |         @wait_tvr_hi:   btst    #2, (BXH).w
+0050008e : 67F8                |                         beq.s   @wait_tvr_hi
+                               | 
+                               |                         ; Short delay
+00500090 : 707F                |                         moveq   #$7F, d0
+00500092 : 4E71                |         @delay:         nop
+00500094 : 51C8 FFFC           |                         dbra    d0, @delay
+                               | 
+                               |                         pop     d0
+00500098 : 201F                
+0050009a : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Turn power off
+                               | ;----------------------------------------------------------------------------
+                               |                         align   2
+0050009c :                     | power_off_fast:
+                               |                         ; Turn off power
+0050009c : 11FC 0000 8010      |                         move.b  #PWR_OFF, (OUT).w
+                               |                        
+                               |                         ; Wait for OUT2=0, OUT1=1 (Vref < 1.40V)
+005000a2 : 4A38 801B           |         @wait_out1_hi:  tst.b   (OUT1).w
+005000a6 : 6AFA                |                         bpl.s   @wait_out1_hi
+005000a8 : 4A38 801D           |         @wait_out2_lo:  tst.b   (OUT2).w
+005000ac : 6BFA                |                         bmi.s   @wait_out2_lo
+                               | 
+                               |                         ; Input MCP active low RESET# output
+                               |                         ; For power off, wait until LOW
+005000ae : 4A38 801E           |         @wait_rst_lo:   tst.b   (RST).w
+005000b2 : 6BFA                |                         bmi.s   @wait_rst_lo
+                               | 
+                               |                         ; Input +5V rail directly
+                               |                         ; For power off, wait until LOW
+005000b4 : 0838 0002 8002      |         @wait_tvr_lo:   btst    #2, (BXH).w
+005000ba : 66F8                |                         bne.s   @wait_tvr_lo
+                               | 
+005000bc : 4E75                |                         rts ;Page 5
+
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Turn power on
+                               | ;----------------------------------------------------------------------------
+                               |                         align   2
+005000be :                     | power_on_fast:
+                               |                         ; Turn on power
+005000be : 11FC 0004 8010      |                         move.b  #PWR_ON, (OUT).w
+                               |                        
+                               |                         ; Wait for OUT2=1, OUT1=0 (Vref > 4.75V)
+005000c4 : 4A38 801B           |         @wait_out1_lo:  tst.b   (OUT1).w
+005000c8 : 6BFA                |                         bmi.s   @wait_out1_lo
+005000ca : 4A38 801D           |         @wait_out2_hi:  tst.b   (OUT2).w
+005000ce : 6AFA                |                         bpl.s   @wait_out2_hi
+                               | 
+                               |                         ; Input +5V rail directly
+                               |                         ; For power on, wait until HIGH
+005000d0 : 0838 0002 8002      |         @wait_tvr_hi:   btst    #2, (BXH).w
+005000d6 : 67F8                |                         beq.s   @wait_tvr_hi
+                               | 
+005000d8 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; End
+                               | ;----------------------------------------------------------------------------
+                               |                         include "usb.inc"
+                               | ;----------------------------------------------------------------------------
+                               | ; usb.inc --
+                               | ; DLP-245M USB functions
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               | ; Send byte to host
+                               | ; d0 = data
+005000da :                     | usb_sendb:
+005000da : 4A38 801F           |                         tst.b   (TXE).w
+005000de : 6BFA                |                         bmi.s   usb_sendb
+005000e0 : 11C0 8004           |                         move.b  d0, (USB_DATA).w
+005000e4 : 4E75                |                         rts
+                               | ; Send word to host
+                               | ; d0 = data
+005000e6 :                     | usb_sendw:
+005000e6 : 3F00                |                         move.w  d0, -(a7)
+005000e8 : 61F0                |                         bsr.s   usb_sendb
+005000ea : E048                |                         lsr.w   #8, d0
+005000ec : 61EC                |                         bsr.s   usb_sendb
+005000ee : 301F                |                         move.w  (a7)+, d0
+005000f0 : 4E75                |                         rts
+                               | ; Send long to host
+                               | ; d0 = data
+005000f2 :                     | usb_sendl:
+005000f2 : 2F00                |                         move.l  d0, -(a7)
+005000f4 : 61E4                |                         bsr.s   usb_sendb
+005000f6 : E088                |                         lsr.l   #8, d0
+005000f8 : 61E0                |                         bsr.s   usb_sendb
+005000fa : E088                |                         lsr.l   #8, d0
+005000fc : 61DC                |                         bsr.s   usb_sendb
+005000fe : E088                |                         lsr.l   #8, d0
+00500100 : 61D8                |                         bsr.s   usb_sendb
+00500102 : 201F                |                         move.l  (a7)+, d0
+00500104 : 4E75                |                         rts
+                               | ; Get byte from host
+                               | ; d0 = data ;Page 6
+
+00500106 :                     | usb_getb:
+00500106 : 4A38 8018           |                         tst.b   (RXF).w
+0050010a : 6BFA                |                         bmi.s   usb_getb
+0050010c : 1038 8004           |                         move.b  (USB_DATA).w, d0
+00500110 : 4E75                |                         rts
+                               | ; Get word from host
+                               | ; d0 = data
+00500112 :                     | usb_getw:
+00500112 : 61F2                |                         bsr.s   usb_getb
+00500114 : E148                |                         lsl.w   #8, d0
+00500116 : 61EE                |                         bsr.s   usb_getb
+00500118 : 4E75                |                         rts
+                               | ; Get long from host
+                               | ; d0 = data
+0050011a :                     | usb_getl:
+0050011a : 61EA                |                         bsr.s   usb_getb
+0050011c : E188                |                         lsl.l   #8, d0
+0050011e : 61E6                |                         bsr.s   usb_getb
+00500120 : E188                |                         lsl.l   #8, d0
+00500122 : 61E2                |                         bsr.s   usb_getb
+00500124 : E188                |                         lsl.l   #8, d0
+00500126 : 61DE                |                         bsr.s   usb_getb
+00500128 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Get data from host
+                               | ;----------------------------------------------------------------------------
+                               | ; a0 = destination data buffer
+                               | ; d0 = length of data in bytes
+                               | ;----------------------------------------------------------------------------
+0050012a :                     | usb_get:
+                               |                         push    a1-a2/d1
+0050012a : 48E7 4060           
+0050012e : 2200                |                         move.l  d0, d1
+00500130 : 43F8 8018           |                         lea     (RXF).w, a1
+00500134 : 45F8 8004           |                         lea     (USB_DATA).w, a2
+00500138 : 4A11                |         @poll:          tst.b   (a1)
+0050013a : 6BFC                |                         bmi.s   @poll
+0050013c : 10D2                |                         move.b  (a2), (a0)+
+0050013e : 5381                |                         subq.l  #1, d1
+00500140 : 66F6                |                         bne.s   @poll
+                               |                         pop     a1-a2/d1
+00500142 : 4CDF 0602           
+00500146 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Send data to host
+                               | ;----------------------------------------------------------------------------
+                               | ; a0 = source data buffer
+                               | ; d0 = length of data in bytes
+                               | ;----------------------------------------------------------------------------
+00500148 :                     | usb_send:
+                               |                         push    a1-a2/d1
+00500148 : 48E7 4060           
+0050014c : 2200                |                         move.l  d0, d1
+0050014e : 43F8 801F           |                         lea     (TXE).w, a1
+00500152 : 45F8 8004           |                         lea     (USB_DATA).w, a2
+00500156 : 4A11                |         @poll:          tst.b   (a1)
+00500158 : 6BFC                |                         bmi.s   @poll
+0050015a : 1498                |                         move.b  (a0)+, (a2)
+0050015c : 5381                |                         subq.l  #1, d1
+0050015e : 66F6                |                         bne.s   @poll ;Page 7
+
+                               |                         pop     a1-a2/d1
+00500160 : 4CDF 0602           
+00500164 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Get data from host (with checksum)
+                               | ;----------------------------------------------------------------------------
+                               | ; a0 = destination data buffer
+                               | ; d0 = length of data in bytes
+                               | ; Carry flag is set on a checksum mismatch
+                               | ;----------------------------------------------------------------------------
+00500166 :                     | usb_get_checksum:
+                               |                         push    a1-a2/d1-d3
+00500166 : 48E7 7060           
+0050016a : 2200                |                         move.l  d0, d1
+0050016c : 43F8 8018           |                         lea     (RXF).w, a1
+00500170 : 45F8 8004           |                         lea     (USB_DATA).w, a2
+00500174 : 7600                |                         moveq   #0, d3
+                               | 
+                               |                         ; Get data and generate checksum
+00500176 : 4A11                |         @poll:          tst.b   (a1)
+00500178 : 6BFC                |                         bmi.s   @poll
+0050017a : 1412                |                         move.b  (a2), d2
+0050017c : D602                |                         add.b   d2, d3
+0050017e : 10C2                |                         move.b  d2, (a0)+
+00500180 : 5381                |                         subq.l  #1, d1
+00500182 : 66F2                |                         bne.s   @poll
+                               | 
+                               |                         ; Send our checksum
+00500184 : 1003                |                         move.b  d3, d0
+00500186 : 4EB9 0050 00DA      |                         jsr     usb_sendb
+                               | 
+                               |                         ; Get client checksum
+0050018c : 4EB9 0050 0106      |                         jsr     usb_getb
+                               | 
+                               |                         ; Check if they match
+00500192 : B003                |                         cmp.b   d3, d0
+00500194 : 67??                |                         beq.s   @match
+00500196 : 003C 0001           |                         ori.b   #1, ccr
+0050019a : 60??                |                         bra.s   @done
+0050019c :                     |         @match:
+0050019c : 023C 00FE           |                         andi.b  #~1, ccr
+005001a0 :                     |         @done:
+                               |                         pop     a1-a2/d1-d3
+005001a0 : 4CDF 060E           
+005001a4 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Send data to host (with checksum)
+                               | ;----------------------------------------------------------------------------
+                               | ; a0 = source data buffer
+                               | ; d0 = length of data in bytes
+                               | ; Carry flag is set on a checksum mismatch
+                               | ;----------------------------------------------------------------------------
+005001a6 :                     | usb_send_checksum:
+                               |                         push    a1-a2/d1-d3
+005001a6 : 48E7 7060           
+005001aa : 2200                |                         move.l  d0, d1
+005001ac : 43F8 801F           |                         lea     (TXE).w, a1
+005001b0 : 45F8 8004           |                         lea     (USB_DATA).w, a2
+005001b4 : 7600                |                         moveq   #0, d3
+                               |  ;Page 8
+
+                               |                         ; Send data
+005001b6 : 4A11                |         @poll:          tst.b   (a1)
+005001b8 : 6BFC                |                         bmi.s   @poll
+005001ba : 1418                |                         move.b  (a0)+, d2
+005001bc : 4E71                |                         nop                     ; bus value
+005001be : D602                |                         add.b   d2, d3
+005001c0 : 1482                |                         move.b  d2, (a2)
+005001c2 : 5381                |                         subq.l  #1, d1
+005001c4 : 66F0                |                         bne.s   @poll
+                               | 
+                               |                         ; Send our checksum
+005001c6 : 1003                |                         move.b  d3, d0
+005001c8 : 4EB9 0050 00DA      |                         jsr     usb_sendb
+                               | 
+                               |                         ; Get host checksum
+005001ce : 4EB9 0050 0106      |                         jsr     usb_getb
+                               | 
+                               |                         ; Check if they match
+005001d4 : B003                |                         cmp.b   d3, d0
+005001d6 : 67??                |                         beq.s   @match
+005001d8 : 003C 0001           |                         ori.b   #1, ccr
+005001dc : 60??                |                         bra.s   @done
+005001de :                     |         @match:
+005001de : 023C 00FE           |                         andi.b  #~1, ccr
+005001e2 :                     |         @done:
+                               |                         pop     a1-a2/d1-d3
+005001e2 : 4CDF 060E           
+005001e6 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; End
+                               | ;----------------------------------------------------------------------------
+                               |                         include "comms.inc"
+                               | ;----------------------------------------------------------------------------
+                               | ; comms.inc --
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               | ; Run dispatch function if there is incoming data
+005001e8 :                     | comms_check_dispatch:
+005001e8 : 4A38 8018           |                         tst.b   (RXF).w
+005001ec : 6A??                |                         bpl.s   comms_dispatch
+005001ee : 4E75                |                         rts
+                               | 
+                               | ; Host command dispatch
+005001f0 :                     | comms_dispatch:
+005001f0 : 7000                |                         moveq   #0, d0
+005001f2 : 4EB9 0050 0106      |                         jsr     usb_getb
+005001f8 : 0200 0007           |                         andi.b  #$07, d0
+005001fc : D000                |                         add.b   d0, d0
+005001fe : D000                |                         add.b   d0, d0
+00500200 : 41FB 00??           |                         lea     @dispatch_table(pc, d0.w), a0
+00500204 : 2050                |                         move.l  (a0), a0
+00500206 : 4E90                |                         jsr     (a0)
+00500208 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Data
+                               | ;----------------------------------------------------------------------------
+                               | 
+0050020a : +0+0                |                         align   4
+0050020c :                     | @dispatch_table:
+0050020c : @@@@ @@@@           |                         dc.l    cmd_nop ;Page 9
+
+00500210 : @@@@ @@@@           |                         dc.l    cmd_echo
+00500214 : @@@@ @@@@           |                         dc.l    cmd_download
+00500218 : @@@@ @@@@           |                         dc.l    cmd_upload
+0050021c : @@@@ @@@@           |                         dc.l    cmd_exec
+00500220 : @@@@ @@@@           |                         dc.l    cmd_reset
+00500224 : @@@@ @@@@           |                         dc.l    cmd_nop
+00500228 : @@@@ @@@@           |                         dc.l    cmd_fault
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Dispatch command table
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               | ; Do nothing
+0050022c :                     | cmd_nop:
+0050022c : 4E71                |                         nop
+0050022e : 4E75                |                         rts
+                               | 
+                               | ; Echo test
+00500230 :                     | cmd_echo:
+00500230 : 4EB9 0050 0106      |                         jsr     usb_getb
+00500236 : 4EB9 0050 00DA      |                         jsr     usb_sendb
+0050023c : 0C00 001B           |                         cmp.b   #27, d0
+00500240 : 66EE                |                         bne.s   cmd_echo
+00500242 : 4E75                |                         rts
+                               | 
+                               | ; Send data to host
+                               | ; A0 = address
+                               | ; D0 = length
+00500244 :                     | cmd_download:
+00500244 : 4EB9 0050 011A      |                         jsr     usb_getl
+0050024a : 2040                |                         move.l  d0, a0
+0050024c : 4EB9 0050 011A      |                         jsr     usb_getl
+00500252 : 4EB9 0050 01A6      |                         jsr     usb_send_checksum
+00500258 : 4E75                |                         rts
+                               | ; Get data from host
+                               | ; A0 = address
+                               | ; D0 = length
+0050025a :                     | cmd_upload:
+0050025a : 4EB9 0050 011A      |                         jsr     usb_getl
+00500260 : 2040                |                         move.l  d0, a0
+00500262 : 4EB9 0050 011A      |                         jsr     usb_getl
+00500268 : 4EB9 0050 0166      |                         jsr     usb_get_checksum
+0050026e : 4E75                |                         rts
+                               | ; Jump to address
+                               | ; A0 = address
+00500270 :                     | cmd_exec:
+00500270 : 4EB9 0050 011A      |                         jsr     usb_getl
+00500276 : 2040                |                         move.l  d0, a0
+00500278 : 4ED0                |                         jmp     (a0)
+                               | 
+                               | ; Software reset
+0050027a :                     | cmd_reset:
+0050027a : 41F8 0000           |                         lea     (ROM_BASE).w, a0
+0050027e : 2E58                |                         move.l  (a0)+, a7
+00500280 : 4E67                |                         move    a7, usp
+00500282 : 2058                |                         move.l  (a0)+, a0
+00500284 : 4E71                |                         nop
+00500286 : 4ED0                |                         jmp     (a0)
+                               | 
+                               | ; Trigger double bus fault
+00500288 :                     | cmd_fault:
+00500288 : 70FF                |                         moveq   #-1, d0 ;Page 10
+
+0050028a : 2E40                |                         move.l  d0, a7
+0050028c : 4E67                |                         move    a7, usp
+0050028e : 4A97                |                         tst.l   (a7)
+00500290 : 4E72 2700           |         @loop:          stop    #$2700
+00500294 : 60FA                |                         bra.s   @loop
+00500296 : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; End
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Main program
+                               | ;----------------------------------------------------------------------------
+00500298 :                     | main:
+00500298 : 11FC 0000 8002      |                         move.b  #$00, (RXH).w
+0050029e : 4EB9 @@@@ @@@@      |                         jsr     read_20pin
+005002a4 : 11FC 00C0 8002      |                         move.b  #$C0, (RXH).w
+005002aa : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Device routines
+                               | ;----------------------------------------------------------------------------
+                               | 
+                               |                         align   2
+005002ac :                     | read_20pin:
+005002ac : 4EB9 0050 0010      |                         jsr     device_init
+005002b2 : 4EB9 0050 0024      |                         jsr     power_off
+005002b8 : 4EB9 0050 006E      |                         jsr     power_on
+                               | 
+                               |                         ; Delay for power-on settling
+005002be : 303C 7FFF           |                         move.w  #$7FFF, d0
+005002c2 : 4E71                |     @waitloop:          nop
+005002c4 : 51C8 FFFC           |                         dbra    d0, @waitloop
+                               | 
+                               |                         ; RXH (write)                   BXH (read)
+                               |                         ; D0 : B8 resistor level        B8 pin level
+                               |                         ; D1 : B9 resistor level        B9 pin level
+                               |                         ; D2 : (N.C.)                   TVR
+                               |                         ; D3 : (N.C.)                   SLP# (ENUM)
+                               |                         ; D4 : PIC WDM                  SCLK (ISP)
+                               |                         ; D5 : PIC WDE                  MODE (ISP)
+                               |                         ; D6 : GRN LED                  SDI  (ISP)
+                               |                         ; D7 : RED LED                  SDO  (ISP)
+                               | 
+                               | 
+005002c8 : 41F9 0048 0000      |                         lea     device_buffer, a0
+005002ce : 43FA ????           |                         lea     revlut(pc), a1
+                               | 
+005002d2 : 7400                |                         moveq   #0, d2                  ; clear index
+                               | 
+005002d4 : 323C 0000           |                         move.w  #$0000, d1              ; initial RX
+005002d8 :                     |         @rxloop:
+                               |                         ; Assign bitswapped RX
+005002d8 : 11F1 1000 8003      |                         move.b  (a1, d1.w), (RXL).w
+                               | 
+005002de : 303C 0000           |                         move.w  #$0000, d0              ; initial IX
+005002e2 :                     |         @ixloop:
+                               |                         ; Set IX inputs
+005002e2 : 31C0 8000           |                         move.w  d0, (IX).w              ; set IX
+                               |  ;Page 11
+
+                               |                         ; Wait for settling time
+                               |                         delay   16
+005002e6 : 4E71 4E71 4E71 4E.. 
+                               | 
+                               |                         ; Read IX inputs
+00500306 : 1438 8003           |                         move.b  (BXL).w, d2
+                               | 
+0050030a : 7E0F                |                         moveq   #$0F, d7
+0050030c : B438 8003           |     @recheck:           cmp.b   (BXL).w, d2
+                               |                       ; bne     fault
+                               |                       ; dbra    d7, @recheck
+                               |                         
+                               |                         ; Bitswap and store
+00500310 : 10F1 2000           |                         move.b  (a1, d2.w), (a0)+       ; bitswap & store
+                               | 
+                               |                         ; Next IX
+00500314 : 5240                |                         addq.w  #1, d0
+00500316 : 0C40 0400           |                         cmpi.w  #$0400, d0
+0050031a : 66C6                |                         bne.s   @ixloop
+                               | 
+0050031c : 5241                |                         addq.w  #1, d1
+0050031e : 0C41 0100           |                         cmpi.w  #$0100, d1
+00500322 : 66B4                |                         bne.s   @rxloop
+                               | 
+00500324 : 4EB9 0050 0024      |                         jsr     power_off
+0050032a : 4E75                |                         rts
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; Subroutines
+                               | ;----------------------------------------------------------------------------
+                               | 
+0050032c :                     | wait:                   push    d0
+0050032c : 2F00                
+0050032e : 4E71                |         @loop:          nop
+00500330 : 51C8 FFFC           |                         dbra    d0, @loop
+                               |                         pop     d0
+00500334 : 201F                
+00500336 : 4E75                |                         rts
+                               | 
+                               | ; RAM test
+                               | ; a0 = base
+                               | ; a1 = end
+00500338 : 48E7 00C0           | ramtest:                move.l  a0-a1, -(a7)
+0050033c : 203C DEAD BEEF      |                         move.l  #$DEADBEEF, d0
+00500342 : 2200                |                         move.l  d0, d1
+00500344 :                     |         @ramfill:       rept    16
+                               |                         move.l  d0, (a0)+
+                               |                         add.l   d1, d0
+                               |                         endr
+00500344 : 20C0 D081 20C0 D0.. 
+00500384 : B3C8                |                         cmpa.l  a0, a1
+00500386 : 66BC                |                         bne.s   @ramfill
+00500388 : 4CDF 0300           |                         move.l  (a7)+, a0-a1
+0050038c : 203C DEAD BEEF      |                         move.l  #$DEADBEEF, d0
+00500392 : 2200                |                         move.l  d0, d1
+00500394 :                     |         @ramchk:        rept    16
+                               |                         cmp.l   (a0)+, d0
+                               |                         bne.s   @error
+                               |                         add.l   d1, d0
+                               |                         endr
+00500394 : B098 66?? D081 B0.. 
+005003f4 : B3C8                |                         cmpa.l  a0, a1 ;Page 12
+
+005003f6 : 669C                |                         bne.s   @ramchk
+005003f8 : 4E75                |                         rts
+005003fa : 4EF9 @@@@ @@@@      |         @error:         jmp     fault
+                               | 
+                               | ; ROM test
+00500400 :                     | romtest:
+00500400 : 7000                |                         moveq   #0, d0
+00500402 : 41F9 0000 0000      |                         lea     $000000, a0
+00500408 : 43F9 0000 0400      |                         lea     $000400, a1
+0050040e :                     |     @checklo:           rept    16
+                               |                         add.l   (a0)+, d0
+                               |                         endr
+0050040e : D098 D098 D098 D0.. 
+0050042e : B3C8                |                         cmpa.l  a0, a1
+00500430 : 66DC                |                         bne.s   @checklo
+00500432 : 41E8 0100           |                         lea     $100(a0), a0
+00500436 : 2278 0400           |                         move.l  ($400).w, a1 ; header: rom size
+0050043a :                     |     @checkhi:           rept    16
+                               |                         add.l   (a0)+, d0
+                               |                         endr
+0050043a : D098 D098 D098 D0.. 
+0050045a : B3C8                |                         cmpa.l  a0, a1
+0050045c : 66DC                |                         bne.s   @checkhi
+0050045e : B0B8 0404           |                         cmp.l   ($0404).w, d0 ; header: checksum
+00500462 : 67??                |                         beq.s   @good
+00500464 : 4EF9 @@@@ @@@@      |                         jmp     fault
+0050046a : 4E75                |         @good:          rts
+                               | 
+                               | 
+                               | ; Force double bus fault
+0050046c :                     | fault:
+0050046c : 70FF                |                         moveq   #-1, d0
+0050046e : 2E40                |                         move.l  d0, a7
+00500470 : 4E67                |                         move    a7, usp
+00500472 : 4A97                |                         tst.l   (a7)
+00500474 : 4E72 2700           |                         stop    #$2700
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; End of program
+                               | ;----------------------------------------------------------------------------
+                               | 
+00500478 : +0+0 +0+0 +0+0 +0.. |                         align   256
+00500500 :                     | revlut:                 incbin  "data\revlut.bin"
+                               | 
+00500600 : +0+0 +0+0 +0+0 +0.. |                         cnop    0, $2000
+                               | 
+                               | ;----------------------------------------------------------------------------
+                               | ; End
+                               | ;----------------------------------------------------------------------------
